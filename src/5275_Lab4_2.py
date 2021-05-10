@@ -207,59 +207,81 @@ class TSception(nn.Module):
         out = out.view(out.size()[0], -1)
         return out.size()
 
-""" train, test """
-def train(model=None, trainloader=None, validloader=None, epochs=1, lr=0.001):
-    doValid = False if validloader == None else True
-    history = {"loss": [], "acc": [], "val_loss": [], "val_acc": []}
-    losses = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr)
-    for ep in range(epochs):
-        proc_start = Timer() # timer start
-        print(f"Epoch {ep + 1}/{epochs}")
-        model.train()
-        for x_batch, y_batch in trainloader:
-            print("█", end="")
-            x_batch, y_batch = x_batch.to(device, dtype=torch.float), y_batch.to(device)
-            pred = model(x_batch)
-            loss = losses(pred, y_batch)
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-        proc_end = Timer() # timer stop
+class Model(object):
+    def __init__(self, model=None, lr=0.001):
+        super(Model, self).__init__()
+        self.model = model
+        self.losses = nn.CrossEntropyLoss()
+        self.optimizer = optim.Adam(model.parameters(), lr=lr)
+    def fit(self, trainloader=None, validloader=None, epochs=1):
+        doValid = False if validloader == None else True
+        history = {"loss": [], "acc": [], "val_loss": [], "val_acc": []}
+        for ep in range(1, epochs + 1):
+            proc_start = Timer() # timer start
+            if (not (ep % 10)) or (ep == 1):
+                print(f"Epoch {ep}/{epochs}")
+            self.model.train()
+            step = 1
+            for x_batch, y_batch in trainloader:
+                x_batch, y_batch = x_batch.to(device, dtype=torch.float), y_batch.to(device)
+                pred = self.model(x_batch)
+                loss = self.losses(pred, y_batch)
+                loss.backward()
+                self.optimizer.step()
+                self.optimizer.zero_grad()
 
-        loss, acc = evaluate(model, trainloader, dumpstr=False)
-        val_loss, val_acc = evaluate(model, validloader, dumpstr=False) if doValid else (0, 0)
-        history["loss"] = np.append(history["loss"], loss)
-        history["acc"] = np.append(history["acc"], acc)
-        history["val_loss"] = np.append(history["val_loss"], val_loss)
-        history["val_acc"] = np.append(history["val_acc"], val_acc)
-        print(" {:.4f}s - loss: {:.4f} - acc: {:.4f} - val_loss: {:.4f} - val_acc: {:.4f}".format(
-            proc_end-proc_start, history["loss"][-1], history["acc"][-1], history["val_loss"][-1], history["val_acc"][-1])
-        )
-    return history
-def evaluate(model, dataloader, dumpstr=True):
-    losses = nn.CrossEntropyLoss()
-    total, acc = 0, 0
-    model.eval()
-    for x_batch, y_batch in dataloader:
-        x_batch, y_batch = x_batch.to(device, dtype=torch.float), y_batch.to(device)
-        pred = model(x_batch)
-        loss = losses(pred, y_batch).item()
-        total += y_batch.shape[0]
-        acc += (torch.sum(pred.argmax(dim=1)==y_batch)).item()
-    acc /= total
-    if dumpstr:
-        print(f"Accuracy: {acc:.4f}\tLoss: {loss:.4f}")
-    return (loss, acc)
+                if (not (ep % 10)) or (ep == 1):
+                    pbar = int(step * 30 / len(trainloader))
+                    print("\r{}/{} [{}{}]".format(
+                        step, len(trainloader), ">" * pbar, " " * (30 - pbar)), 
+                        end="")
+                step += 1
+            proc_end = Timer() # timer stop
+
+            loss, acc = self.evaluate(trainloader)
+            val_loss, val_acc = self.evaluate(validloader) if doValid else (0, 0)
+            history["loss"] = np.append(history["loss"], loss)
+            history["acc"] = np.append(history["acc"], acc)
+            history["val_loss"] = np.append(history["val_loss"], val_loss)
+            history["val_acc"] = np.append(history["val_acc"], val_acc)
+            if (not (ep % 10)) or (ep == 1):
+                print(" {:.4f}s - loss: {:.4f} - acc: {:.4f} - val_loss: {:.4f} - val_acc: {:.4f}".format(
+                    proc_end-proc_start, history["loss"][-1], 
+                    history["acc"][-1], history["val_loss"][-1], history["val_acc"][-1])
+                )
+        return history
+    def evaluate(self, dataloader):
+        total, acc = 0, 0
+        self.model.eval()
+        for x_batch, y_batch in dataloader:
+            x_batch, y_batch = x_batch.to(device, dtype=torch.float), y_batch.to(device)
+            pred = self.model(x_batch)
+            loss = self.losses(pred, y_batch).item()
+            total += y_batch.shape[0]
+            acc += (torch.sum(pred.argmax(dim=1)==y_batch)).item()
+        acc /= total
+
+        return (loss, acc)
+    def predict(self, dataloader):
+        prediction = []
+        self.model.eval()
+        for x_batch, y_batch in dataloader:
+            x_batch, y_batch = x_batch.to(device, dtype=torch.float), y_batch.to(device)
+            pred = self.model(x_batch).cpu()
+            prediction = np.append(prediction, pred.argmax(dim=1).numpy())
+        return prediction
 
 train_raw = loadmat(DATASET_DIR + "BCIC_S01_T.mat")
 test_raw = loadmat(DATASET_DIR + "BCIC_S01_E.mat")
 trX, trY, teX, teY = train_raw["x_train"], train_raw["y_train"], test_raw["x_test"], test_raw["y_test"]
 
+# from tensorflow.keras import utils
 x_train = torch.from_numpy(np.expand_dims(trX, axis=1))
 y_train = torch.from_numpy(np.reshape(trY, (trY.size, ))).long()
+# y_train = torch.from_numpy(utils.to_categorical(trY, 4))
 x_test = torch.from_numpy(np.expand_dims(teX, axis=1))
 y_test = torch.from_numpy(np.reshape(teY, (teY.size, ))).long()
+# y_test = torch.from_numpy(utils.to_categorical(teY, 4))
 
 print(x_train.shape, y_train.shape)
 print(x_test.shape, y_test.shape)
@@ -272,34 +294,38 @@ testloader = DataLoader(dataset=testset, batch_size=bs, shuffle=True)
 
 eegnet = EEGNet().to(device)
 
-history = train(model=eegnet, trainloader=trainloader, validloader=testloader, epochs=100, lr=0.001)
-#history = train(model=eegnet, trainloader=trainloader, epochs=100, lr=0.001)
+model = Model(eegnet, lr=0.001)
+history = model.fit(trainloader=trainloader, validloader=testloader, epochs=200)
+
+sconnet = ShallowConvNet().to(device)
+model = Model(sconnet, lr=0.001)
+history = model.fit(trainloader=trainloader, validloader=testloader, epochs=200)
+
+eva_train = model.evaluate(dataloader=trainloader)
+print(f"Train Accuracy: {eva_train[1]:.4f}\tTrain Loss: {eva_train[0]:.4f}")
+eva_test = model.evaluate(dataloader=testloader)
+print(f"Test Accuracy: {eva_test[1]:.4f}\tTest Loss: {eva_test[0]:.4f}")
 
 plt.figure(figsize = (10, 4))
 plt.subplot(1, 2, 1)
-plt.title("Loss")
+plt.title("Acc")
 plt.plot(history["acc"], color="red")
 plt.plot(history["val_acc"], color="blue")
 plt.subplot(1, 2, 2)
-plt.title("Acc")
+plt.title("Loss")
 plt.plot(history["loss"], color="red")
 plt.plot(history["val_loss"], color="blue")
 plt.show()
 
+pred = model.predict(dataloader=testloader)
 
+print(pred)
+print(y_test)
 
 """ref"""
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = SCCNet().to(device)
 summary(model, (1, 22, 562))
-
-trX = torch.Tensor(train_raw["x_train"]).unsqueeze(1)
-trY = torch.Tensor(train_raw["y_train"]).view(-1).long()
-testX = torch.Tensor(test_raw["x_test"]).unsqueeze(1)
-testY = torch.Tensor(test_raw["y_test"]).view(-1).long()
-
-print(trX.shape, trY.shape)
-print(testX.shape, testY.shape)
 cmp = Tensor().numpy() == np.array()
 cmp.all()
