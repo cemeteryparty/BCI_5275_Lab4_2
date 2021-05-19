@@ -29,6 +29,8 @@ BASE_DIR = "/content/drive/MyDrive/lab4/"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # torch shape: (batch_size, chan (depth), h, w)
 
+"""# EEG-model"""
+
 class EEGNet(nn.Module):
     def __init__(self):
         super(EEGNet, self).__init__()
@@ -208,19 +210,21 @@ class TSception(nn.Module):
         out = out.view(out.size()[0], -1)
         return out.size()
 
+"""# Model Utilities & some function"""
+
 class Model(object):
     def __init__(self, model=None, lr=0.001):
         super(Model, self).__init__()
         self.model = model
         self.losses = nn.CrossEntropyLoss()
         self.optimizer = optim.Adam(model.parameters(), lr=lr)
-    def fit(self, trainloader=None, validloader=None, epochs=1, monitor=None):
+    def fit(self, trainloader=None, validloader=None, epochs=1, monitor=None, verbose=1):
         doValid = False if validloader == None else True
         pre_ck_point = [float("inf"), 0.0, float("inf"), 0.0, 0] # loss, acc, val_loss, val_acc, epoch
         history = {"loss": [], "acc": [], "val_loss": [], "val_acc": []}
         for ep in range(1, epochs + 1):
             proc_start = time.time() # timer start
-            if (not (ep % 10)) or (ep == 1):
+            if ((not (ep % 10)) or (ep == 1)) and verbose != 0:
                 print(f"Epoch {ep}/{epochs}")
             self.model.train()
             step = 1
@@ -232,7 +236,7 @@ class Model(object):
                 self.optimizer.step()
                 self.optimizer.zero_grad()
 
-                if (not (ep % 10)) or (ep == 1):
+                if ((not (ep % 10)) or (ep == 1)) and verbose != 0:
                     pbar = int(step * 30 / len(trainloader))
                     print("\r{}/{} [{}{}]".format(
                         step, len(trainloader), ">" * pbar, " " * (30 - pbar)), 
@@ -246,7 +250,7 @@ class Model(object):
             history["val_loss"] = np.append(history["val_loss"], val_loss)
             history["val_acc"] = np.append(history["val_acc"], val_acc)
             # dump message
-            if (not (ep % 10)) or (ep == 1):
+            if ((not (ep % 10)) or (ep == 1)) and verbose != 0:
                 print(" {:.4f}s - loss: {:.4f} - acc: {:.4f} - val_loss: {:.4f} - val_acc: {:.4f}".format(
                     time.time()-proc_start, history["loss"][-1], 
                     history["acc"][-1], history["val_loss"][-1], history["val_acc"][-1])
@@ -255,8 +259,9 @@ class Model(object):
             if self.__updateCheckpoint(monitor, pre_ck_point, [loss, acc, val_loss, val_acc, ep]):
                 if not os.path.exists("./model"):
                     os.mkdir("./model")
-                print(f"save model/checkpoint_model_ep-{ep}.pt")
-                self.save(f"model/checkpoint_model_ep-{ep}.pt")
+                model_name = f"model/checkpoint_model_ep-{ep}.pt"
+                self.save(model_name)
+                history["lastest_model_path"] = model_name
                 pre_ck_point = [loss, acc, val_loss, val_acc, ep]
         return history
     def evaluate(self, dataloader):
@@ -271,14 +276,15 @@ class Model(object):
         acc /= total
 
         return (loss, acc)
-    def predict(self, dataloader):
+    def predict(self, dataset, batch_size=128):
+        dataloader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=False)
         prediction = []
         self.model.eval()
         for x_batch, y_batch in dataloader:
             x_batch, y_batch = x_batch.to(device, dtype=torch.float), y_batch.to(device)
             pred = self.model(x_batch).cpu()
             prediction = np.append(prediction, pred.argmax(dim=1).numpy())
-        return prediction
+        return prediction.astype("uint8")
     def save(self, filepath):
         torch.save(self.model, filepath)
     @classmethod
@@ -325,8 +331,6 @@ def plot_confusion_matrix(conf_matrix, title="Confusion Matrix"):
 ## Problem 1
 """
 
-!ls -al model
-
 BATCH_SIZE = 32
 Learning_Rate = 0.001
 EPOCHS = 500
@@ -368,7 +372,7 @@ plt.show()
 """### (a)"""
 
 # load model
-ld_model = Model.load("model/checkpoint_model_ep-477.pt")
+ld_model = Model.load(history["lastest_model_path"])
 eva_train = ld_model.evaluate(dataloader=trainloader)
 print(f"Train Accuracy: {eva_train[1]:.4f}\tTrain Loss: {eva_train[0]:.4f}")
 eva_test = ld_model.evaluate(dataloader=testloader)
@@ -384,9 +388,8 @@ conf_matrix_test = np.zeros(shape=(4, 4), dtype="uint8")
 
 real_train = trY.reshape(trY.size)
 real_test = teY.reshape(teY.size)
-# Warning: close shuffle first before predict
-pred_train = ld_model.predict(dataloader=DataLoader(dataset=trainset, batch_size=BATCH_SIZE, shuffle=False)).astype("uint8")
-pred_test = ld_model.predict(dataloader=DataLoader(dataset=testset, batch_size=BATCH_SIZE, shuffle=False)).astype("uint8")
+pred_train = ld_model.predict(dataset=trainset)
+pred_test = ld_model.predict(dataset=testset)
 
 for i in range(288):
     rec_train["total"][real_train[i]] += 1
@@ -405,8 +408,211 @@ for i in range(4):
 
 """### (c)"""
 
-print(conf_matrix_train)
+#print(conf_matrix_train)
 plot_confusion_matrix(conf_matrix_train, "Train Confusion Matrix")
 
-print(conf_matrix_test)
+#print(conf_matrix_test)
+plot_confusion_matrix(conf_matrix_test, "Test Confusion Matrix")
+
+"""## Problem 2"""
+
+train_raw = loadmat(DATASET_DIR + "BCIC_S01_T.mat")
+test_raw = loadmat(DATASET_DIR + "BCIC_S01_E.mat")
+trX, trY, teX, teY = train_raw["x_train"], train_raw["y_train"], test_raw["x_test"], test_raw["y_test"]
+x_train = torch.from_numpy(np.expand_dims(trX, axis=1))
+y_train = torch.from_numpy(np.reshape(trY, (trY.size, ))).long()
+x_test = torch.from_numpy(np.expand_dims(teX, axis=1))
+y_test = torch.from_numpy(np.reshape(teY, (teY.size, ))).long()
+trainset, testset = TensorDataset(x_train, y_train), TensorDataset(x_test, y_test)
+
+eegnet = EEGNet().to(device)
+#ld_models = {}
+for lr in [0.003, 0.001, 0.0003, 0.0001]:
+    #best_models = {}
+    for bs in [64, 32, 8, 2]:
+        print(f"Process at learninr rate: {lr}, batch size: {bs}")
+        trainloader = DataLoader(dataset=trainset, batch_size=bs, shuffle=True)
+        testloader = DataLoader(dataset=testset, batch_size=bs, shuffle=True)
+        model = Model(eegnet, lr=lr)
+        history = model.fit(trainloader=trainloader, validloader=testloader, 
+            epochs=500, monitor=["acc", "val_acc"], verbose=0)
+        best_model = Model.load(history["lastest_model_path"])
+        best_model.save(f"/content/drive/MyDrive/lab4/model/bs-{bs}_lr-{lr}_model.pt")
+        #best_models[bs] = Model.load(history["lastest_model_path"])
+    #ld_models[lr] = best_models
+
+for lr in [0.003, 0.001, 0.0003, 0.0001]:
+    for bs in [64, 32, 8, 2]:
+        ld_model = Model.load(f"/content/drive/MyDrive/lab4/model/bs-{bs}_lr-{lr}_model.pt")
+        testloader = DataLoader(dataset=testset, batch_size=bs, shuffle=True)
+        eva_test = ld_model.evaluate(dataloader=testloader)
+        print(f"Test Accuracy of lr={lr}, batch_size={bs}: {eva_test[1]:.4f}")
+
+"""## Problem 3"""
+
+train_raw_set = [loadmat(DATASET_DIR + f"BCIC_S0{i}_T.mat") for i in range(1, 10)]
+test_raw_set = [loadmat(DATASET_DIR + f"BCIC_S0{i}_E.mat") for i in range(1, 10)]
+
+eegnet = EEGNet().to(device)
+
+"""### SI"""
+
+trX, trY = np.empty((0, 22, 562)), np.empty((0, 1))
+teX, teY = test_raw_set[0]["x_test"], test_raw_set[0]["y_test"]
+for i in range(1, 9):
+    trX = np.vstack([trX, train_raw_set[i]["x_train"]])
+    trX = np.vstack([trX, test_raw_set[i]["x_test"]])
+    trY = np.vstack([trY, train_raw_set[i]["y_train"]])
+    trY = np.vstack([trY, test_raw_set[i]["y_test"]])
+#print(trX.shape, trY.shape, teX.shape, teY.shape)
+x_train = torch.from_numpy(np.expand_dims(trX, axis=1))
+y_train = torch.from_numpy(np.reshape(trY, (trY.size, ))).long()
+x_test = torch.from_numpy(np.expand_dims(teX, axis=1))
+y_test = torch.from_numpy(np.reshape(teY, (teY.size, ))).long()
+trainset, testset = TensorDataset(x_train, y_train), TensorDataset(x_test, y_test)
+trainloader = DataLoader(dataset=trainset, batch_size=64, shuffle=True)
+testloader = DataLoader(dataset=testset, batch_size=64, shuffle=True)
+
+model = Model(eegnet, lr=0.001)
+# save checkpoint model when both trainset and validset get new max acc
+history = model.fit(trainloader=trainloader, validloader=testloader, epochs=500, monitor=["acc", "val_acc"])
+
+plt.figure(figsize = (10, 4))
+plt.subplot(1, 2, 1)
+plt.title("Acc")
+plt.plot(history["acc"], color="red")
+plt.plot(history["val_acc"], color="blue")
+plt.subplot(1, 2, 2)
+plt.title("Loss")
+plt.plot(history["loss"], color="red")
+plt.plot(history["val_loss"], color="blue")
+plt.show()
+
+# load model
+ld_model = Model.load(history["lastest_model_path"])
+eva_test = ld_model.evaluate(dataloader=testloader)
+print(f"Test Accuracy: {eva_test[1]:.4f}\tTest Loss: {eva_test[0]:.4f}")
+rec_test = {"total": [0, 0, 0, 0], "hit": [0, 0, 0, 0]}
+conf_matrix_test = np.zeros(shape=(4, 4), dtype="uint8")
+
+real_test = teY.reshape(teY.size)
+pred_test = ld_model.predict(dataset=testset)
+for i in range(real_test.size):
+    rec_test["total"][real_test[i]] += 1
+    rec_test["hit"][real_test[i]] += (1 if real_test[i] == pred_test[i] else 0)
+    conf_matrix_test[real_test[i]][pred_test[i]] += 1
+for i in range(4):
+    print("Test accuracy of class-{}: {}".format(i, rec_test["hit"][i] / rec_test["total"][i]))
+plot_confusion_matrix(conf_matrix_test, "Test Confusion Matrix")
+
+"""### SD"""
+
+trX, trY = np.empty((0, 22, 562)), np.empty((0, 1))
+teX, teY = test_raw_set[0]["x_test"], test_raw_set[0]["y_test"]
+for i in range(1, 9):
+    trX = np.vstack([trX, train_raw_set[i]["x_train"]])
+    trX = np.vstack([trX, test_raw_set[i]["x_test"]])
+    trY = np.vstack([trY, train_raw_set[i]["y_train"]])
+    trY = np.vstack([trY, test_raw_set[i]["y_test"]])
+trX = np.vstack([trX, train_raw_set[0]["x_train"]])
+trY = np.vstack([trY, train_raw_set[0]["y_train"]])
+x_train = torch.from_numpy(np.expand_dims(trX, axis=1))
+y_train = torch.from_numpy(np.reshape(trY, (trY.size, ))).long()
+x_test = torch.from_numpy(np.expand_dims(teX, axis=1))
+y_test = torch.from_numpy(np.reshape(teY, (teY.size, ))).long()
+trainset, testset = TensorDataset(x_train, y_train), TensorDataset(x_test, y_test)
+trainloader = DataLoader(dataset=trainset, batch_size=64, shuffle=True)
+testloader = DataLoader(dataset=testset, batch_size=64, shuffle=True)
+
+model = Model(eegnet, lr=0.001)
+# save checkpoint model when both trainset and validset get new max acc
+history = model.fit(trainloader=trainloader, validloader=testloader, epochs=500, monitor=["acc", "val_acc"])
+
+plt.figure(figsize = (10, 4))
+plt.subplot(1, 2, 1)
+plt.title("Acc")
+plt.plot(history["acc"], color="red")
+plt.plot(history["val_acc"], color="blue")
+plt.subplot(1, 2, 2)
+plt.title("Loss")
+plt.plot(history["loss"], color="red")
+plt.plot(history["val_loss"], color="blue")
+plt.show()
+
+# load model
+ld_model = Model.load(history["lastest_model_path"])
+eva_test = ld_model.evaluate(dataloader=testloader)
+print(f"Test Accuracy: {eva_test[1]:.4f}\tTest Loss: {eva_test[0]:.4f}")
+rec_test = {"total": [0, 0, 0, 0], "hit": [0, 0, 0, 0]}
+conf_matrix_test = np.zeros(shape=(4, 4), dtype="uint8")
+
+real_test = teY.reshape(teY.size)
+pred_test = ld_model.predict(dataset=testset)
+for i in range(real_test.size):
+    rec_test["total"][real_test[i]] += 1
+    rec_test["hit"][real_test[i]] += (1 if real_test[i] == pred_test[i] else 0)
+    conf_matrix_test[real_test[i]][pred_test[i]] += 1
+for i in range(4):
+    print("Test accuracy of class-{}: {}".format(i, rec_test["hit"][i] / rec_test["total"][i]))
+plot_confusion_matrix(conf_matrix_test, "Test Confusion Matrix")
+
+"""### SI + FT"""
+
+trX, trY = np.empty((0, 22, 562)), np.empty((0, 1))
+teX, teY = test_raw_set[0]["x_test"], test_raw_set[0]["y_test"]
+for i in range(1, 9):
+    trX = np.vstack([trX, train_raw_set[i]["x_train"]])
+    trX = np.vstack([trX, test_raw_set[i]["x_test"]])
+    trY = np.vstack([trY, train_raw_set[i]["y_train"]])
+    trY = np.vstack([trY, test_raw_set[i]["y_test"]])
+#print(trX.shape, trY.shape, teX.shape, teY.shape)
+x_train = torch.from_numpy(np.expand_dims(trX, axis=1))
+y_train = torch.from_numpy(np.reshape(trY, (trY.size, ))).long()
+x_test = torch.from_numpy(np.expand_dims(teX, axis=1))
+y_test = torch.from_numpy(np.reshape(teY, (teY.size, ))).long()
+trainset, testset = TensorDataset(x_train, y_train), TensorDataset(x_test, y_test)
+trainloader = DataLoader(dataset=trainset, batch_size=64, shuffle=True)
+testloader = DataLoader(dataset=testset, batch_size=64, shuffle=True)
+
+model = Model(eegnet, lr=0.001)
+# save checkpoint model when both trainset and validset get new max acc
+history = model.fit(trainloader=trainloader, validloader=testloader, epochs=500, monitor=["acc", "val_acc"])
+# save pre-trained model
+ld_model = Model.load(history["lastest_model_path"])
+ld_model.save("./model/pre-trained_si_model.pt")
+
+""" fine tune """
+trX = train_raw_set[0]["x_train"]
+trY = train_raw_set[0]["y_train"]
+x_train = torch.from_numpy(np.expand_dims(trX, axis=1))
+y_train = torch.from_numpy(np.reshape(trY, (trY.size, ))).long()
+trainset = TensorDataset(x_train, y_train)
+trainloader = DataLoader(dataset=trainset, batch_size=64, shuffle=True)
+
+torch_model = torch.load("./model/pre-trained_si_model.pt")
+for param in torch_model.parameters():
+    param.requires_grad = False
+torch_model.classifier = nn.Linear(torch_model.classifier.in_features, 4)
+ft_model = torch_model.to(device)
+summary(ft_model, (1, 22, 562))
+
+model = Model(ft_model, lr=0.001)
+model.optimizer = optim.Adam(ft_model.classifier.parameters(), lr=0.001)
+history = model.fit(trainloader=trainloader, validloader=testloader, epochs=500, monitor=["acc", "val_acc"])
+
+# load model
+ld_model = Model.load(history["lastest_model_path"])
+eva_test = ld_model.evaluate(dataloader=testloader)
+print(f"Test Accuracy: {eva_test[1]:.4f}\tTest Loss: {eva_test[0]:.4f}")
+rec_test = {"total": [0, 0, 0, 0], "hit": [0, 0, 0, 0]}
+conf_matrix_test = np.zeros(shape=(4, 4), dtype="uint8")
+
+real_test = teY.reshape(teY.size)
+pred_test = ld_model.predict(dataset=testset)
+for i in range(real_test.size):
+    rec_test["total"][real_test[i]] += 1
+    rec_test["hit"][real_test[i]] += (1 if real_test[i] == pred_test[i] else 0)
+    conf_matrix_test[real_test[i]][pred_test[i]] += 1
+for i in range(4):
+    print("Test accuracy of class-{}: {}".format(i, rec_test["hit"][i] / rec_test["total"][i]))
 plot_confusion_matrix(conf_matrix_test, "Test Confusion Matrix")
