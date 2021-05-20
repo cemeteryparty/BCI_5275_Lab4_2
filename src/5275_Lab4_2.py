@@ -453,8 +453,6 @@ for lr in [0.003, 0.001, 0.0003, 0.0001]:
 train_raw_set = [loadmat(DATASET_DIR + f"BCIC_S0{i}_T.mat") for i in range(1, 10)]
 test_raw_set = [loadmat(DATASET_DIR + f"BCIC_S0{i}_E.mat") for i in range(1, 10)]
 
-eegnet = EEGNet().to(device)
-
 """### SI"""
 
 trX, trY = np.empty((0, 22, 562)), np.empty((0, 1))
@@ -470,10 +468,10 @@ y_train = torch.from_numpy(np.reshape(trY, (trY.size, ))).long()
 x_test = torch.from_numpy(np.expand_dims(teX, axis=1))
 y_test = torch.from_numpy(np.reshape(teY, (teY.size, ))).long()
 trainset, testset = TensorDataset(x_train, y_train), TensorDataset(x_test, y_test)
-trainloader = DataLoader(dataset=trainset, batch_size=64, shuffle=True)
-testloader = DataLoader(dataset=testset, batch_size=64, shuffle=True)
+trainloader = DataLoader(dataset=trainset, batch_size=32, shuffle=True)
+testloader = DataLoader(dataset=testset, batch_size=32, shuffle=True)
 
-model = Model(eegnet, lr=0.001)
+model = Model(EEGNet().to(device), lr=0.001)
 # save checkpoint model when both trainset and validset get new max acc
 history = model.fit(trainloader=trainloader, validloader=testloader, epochs=500, monitor=["acc", "val_acc"])
 
@@ -521,10 +519,10 @@ y_train = torch.from_numpy(np.reshape(trY, (trY.size, ))).long()
 x_test = torch.from_numpy(np.expand_dims(teX, axis=1))
 y_test = torch.from_numpy(np.reshape(teY, (teY.size, ))).long()
 trainset, testset = TensorDataset(x_train, y_train), TensorDataset(x_test, y_test)
-trainloader = DataLoader(dataset=trainset, batch_size=64, shuffle=True)
-testloader = DataLoader(dataset=testset, batch_size=64, shuffle=True)
+trainloader = DataLoader(dataset=trainset, batch_size=32, shuffle=True)
+testloader = DataLoader(dataset=testset, batch_size=32, shuffle=True)
 
-model = Model(eegnet, lr=0.001)
+model = Model(EEGNet().to(device), lr=0.001)
 # save checkpoint model when both trainset and validset get new max acc
 history = model.fit(trainloader=trainloader, validloader=testloader, epochs=500, monitor=["acc", "val_acc"])
 
@@ -571,10 +569,10 @@ y_train = torch.from_numpy(np.reshape(trY, (trY.size, ))).long()
 x_test = torch.from_numpy(np.expand_dims(teX, axis=1))
 y_test = torch.from_numpy(np.reshape(teY, (teY.size, ))).long()
 trainset, testset = TensorDataset(x_train, y_train), TensorDataset(x_test, y_test)
-trainloader = DataLoader(dataset=trainset, batch_size=64, shuffle=True)
-testloader = DataLoader(dataset=testset, batch_size=64, shuffle=True)
+trainloader = DataLoader(dataset=trainset, batch_size=32, shuffle=True)
+testloader = DataLoader(dataset=testset, batch_size=32, shuffle=True)
 
-model = Model(eegnet, lr=0.001)
+model = Model(EEGNet().to(device), lr=0.001)
 # save checkpoint model when both trainset and validset get new max acc
 history = model.fit(trainloader=trainloader, validloader=testloader, epochs=500, monitor=["acc", "val_acc"])
 # save pre-trained model
@@ -587,7 +585,7 @@ trY = train_raw_set[0]["y_train"]
 x_train = torch.from_numpy(np.expand_dims(trX, axis=1))
 y_train = torch.from_numpy(np.reshape(trY, (trY.size, ))).long()
 trainset = TensorDataset(x_train, y_train)
-trainloader = DataLoader(dataset=trainset, batch_size=64, shuffle=True)
+trainloader = DataLoader(dataset=trainset, batch_size=32, shuffle=True)
 
 torch_model = torch.load("./model/pre-trained_si_model.pt")
 for param in torch_model.parameters():
@@ -616,3 +614,237 @@ for i in range(real_test.size):
 for i in range(4):
     print("Test accuracy of class-{}: {}".format(i, rec_test["hit"][i] / rec_test["total"][i]))
 plot_confusion_matrix(conf_matrix_test, "Test Confusion Matrix")
+
+"""## Problem 4"""
+
+""" use subject individual scheme """
+train_raw = loadmat(DATASET_DIR + "BCIC_S01_T.mat")
+test_raw = loadmat(DATASET_DIR + "BCIC_S01_E.mat")
+trX, trY, teX, teY = train_raw["x_train"], train_raw["y_train"], test_raw["x_test"], test_raw["y_test"]
+x_train = torch.from_numpy(np.expand_dims(trX, axis=1))
+y_train = torch.from_numpy(np.reshape(trY, (trY.size, ))).long()
+x_test = torch.from_numpy(np.expand_dims(teX, axis=1))
+y_test = torch.from_numpy(np.reshape(teY, (teY.size, ))).long()
+trainset, testset = TensorDataset(x_train, y_train), TensorDataset(x_test, y_test)
+# use same test loader
+testloader = DataLoader(dataset=testset, batch_size=128, shuffle=True)
+
+"""### Shuffle=True"""
+
+# model with shuffle=True
+trainloader = DataLoader(dataset=trainset, batch_size=128, shuffle=True)
+model = Model(EEGNet().to(device), lr=0.001)
+true_shuffle_his = model.fit(trainloader=trainloader, validloader=testloader, epochs=500, monitor=["acc", "val_acc"])
+true_shuffle_ld_model = Model.load(true_shuffle_his["lastest_model_path"])
+
+"""### Shuffle=False"""
+
+# model with shuffle=False
+trainloader = DataLoader(dataset=trainset, batch_size=128, shuffle=False)
+model = Model(EEGNet().to(device), lr=0.001)
+false_shuffle_his = model.fit(trainloader=trainloader, validloader=testloader, epochs=500, monitor=["acc", "val_acc"])
+false_shuffle_ld_model = Model.load(false_shuffle_his["lastest_model_path"])
+
+eva_true_shuffle = true_shuffle_ld_model.evaluate(testloader)
+print(f"True Shuffle Train Accuracy: {eva_true_shuffle[1]:.4f}\tTrain Loss: {eva_true_shuffle[0]:.4f}")
+eva_false_shuffle = false_shuffle_ld_model.evaluate(testloader)
+print(f"False Shuffle Train Accuracy: {eva_false_shuffle[1]:.4f}\tTrain Loss: {eva_false_shuffle[0]:.4f}")
+
+plt.figure(figsize = (15, 15))
+plt.subplot(2, 2, 1)
+plt.title("Train Acc")
+plt.plot(true_shuffle_his["acc"], color="red", label="True")
+plt.plot(false_shuffle_his["acc"], color="blue", label="False")
+plt.legend(loc = "best", fontsize=10)
+plt.subplot(2, 2, 2)
+plt.title("Validation Acc")
+plt.plot(true_shuffle_his["val_acc"], color="red", label="True")
+plt.plot(false_shuffle_his["val_acc"], color="blue", label="False")
+plt.legend(loc = "best", fontsize=10)
+plt.subplot(2, 2, 3)
+plt.title("Train Loss")
+plt.plot(true_shuffle_his["loss"], color="red", label="True")
+plt.plot(false_shuffle_his["loss"], color="blue", label="False")
+plt.legend(loc = "best", fontsize=10)
+plt.subplot(2, 2, 4)
+plt.title("Validation Loss")
+plt.plot(true_shuffle_his["val_loss"], color="red", label="True")
+plt.plot(false_shuffle_his["val_loss"], color="blue", label="False")
+plt.legend(loc = "best", fontsize=10)
+plt.show()
+
+"""# Part 2"""
+
+train_raw_set = [loadmat(DATASET_DIR + f"BCIC_S0{i}_T.mat") for i in range(1, 10)]
+test_raw_set = [loadmat(DATASET_DIR + f"BCIC_S0{i}_E.mat") for i in range(1, 10)]
+""" All schemes share same testset """
+teX, teY = test_raw_set[0]["x_test"], test_raw_set[0]["y_test"]
+x_test = torch.from_numpy(np.expand_dims(teX, axis=1))
+y_test = torch.from_numpy(np.reshape(teY, (teY.size, ))).long()
+testset = TensorDataset(x_test, y_test)
+""" Create Subject-Individual (Ind) Dataset """
+trX, trY = train_raw_set[0]["x_train"], train_raw_set[0]["y_train"]
+x_train = torch.from_numpy(np.expand_dims(trX, axis=1))
+y_train = torch.from_numpy(np.reshape(trY, (trY.size, ))).long()
+ind_trainset = TensorDataset(x_train, y_train)
+
+""" Create Subject-Independent (SI) Dataset """
+trX, trY = np.empty((0, 22, 562)), np.empty((0, 1))
+for i in range(1, 9):
+    trX = np.vstack([trX, train_raw_set[i]["x_train"]])
+    trX = np.vstack([trX, test_raw_set[i]["x_test"]])
+    trY = np.vstack([trY, train_raw_set[i]["y_train"]])
+    trY = np.vstack([trY, test_raw_set[i]["y_test"]])
+x_train = torch.from_numpy(np.expand_dims(trX, axis=1))
+y_train = torch.from_numpy(np.reshape(trY, (trY.size, ))).long()
+si_trainset = TensorDataset(x_train, y_train)
+
+""" Create Subject-Dependent (SD) Dataset """
+trX, trY = np.empty((0, 22, 562)), np.empty((0, 1))
+for i in range(1, 9):
+    trX = np.vstack([trX, train_raw_set[i]["x_train"]])
+    trX = np.vstack([trX, test_raw_set[i]["x_test"]])
+    trY = np.vstack([trY, train_raw_set[i]["y_train"]])
+    trY = np.vstack([trY, test_raw_set[i]["y_test"]])
+trX = np.vstack([trX, train_raw_set[0]["x_train"]])
+trY = np.vstack([trY, train_raw_set[0]["y_train"]])
+x_train = torch.from_numpy(np.expand_dims(trX, axis=1))
+y_train = torch.from_numpy(np.reshape(trY, (trY.size, ))).long()
+sd_trainset = TensorDataset(x_train, y_train)
+
+""" Create Subject-Independent + Fine-Tuning (SI+FT) Dataset """
+# train by si_trainset
+trX = train_raw_set[0]["x_train"]
+trY = train_raw_set[0]["y_train"]
+x_train = torch.from_numpy(np.expand_dims(trX, axis=1))
+y_train = torch.from_numpy(np.reshape(trY, (trY.size, ))).long()
+ft_trainset = TensorDataset(x_train, y_train)
+
+"""## EEGNet
+
+### Subject-Individual
+"""
+
+trainloader = DataLoader(dataset=ind_trainset, batch_size=32, shuffle=True)
+testloader = DataLoader(dataset=testset, batch_size=32, shuffle=True)
+model = Model(EEGNet().to(device), lr=0.001)
+eegnet_ind_his = model.fit(trainloader=trainloader, validloader=testloader, 
+    epochs=500, monitor=["acc", "val_acc"])
+plt.figure(figsize = (10, 4))
+plt.subplot(1, 2, 1)
+plt.title("Acc")
+plt.plot(eegnet_ind_his["acc"], color="red")
+plt.plot(eegnet_ind_his["val_acc"], color="blue")
+plt.subplot(1, 2, 2)
+plt.title("Loss")
+plt.plot(eegnet_ind_his["loss"], color="red")
+plt.plot(eegnet_ind_his["val_loss"], color="blue")
+plt.show()
+
+ind_model = Model.load(eegnet_ind_his["lastest_model_path"])
+eva_test = ind_model.evaluate(dataloader=testloader)
+print(f"Test Accuracy: {eva_test[1]:.4f}\tTest Loss: {eva_test[0]:.4f}")
+rec_test = {"total": [0, 0, 0, 0], "hit": [0, 0, 0, 0]}
+real_test = teY.reshape(teY.size)
+pred_test = ind_model.predict(dataset=testset)
+for i in range(288):
+    rec_test["total"][real_test[i]] += 1
+    rec_test["hit"][real_test[i]] += (1 if real_test[i] == pred_test[i] else 0)
+for i in range(4):
+    print("Test accuracy of class-{}: {}".format(i, rec_test["hit"][i] / rec_test["total"][i]))
+
+"""### Subject-Independent"""
+
+trainloader = DataLoader(dataset=si_trainset, batch_size=32, shuffle=True)
+testloader = DataLoader(dataset=testset, batch_size=32, shuffle=True)
+model = Model(EEGNet().to(device), lr=0.001)
+eegnet_si_his = model.fit(trainloader=trainloader, validloader=testloader, 
+    epochs=500, monitor=["acc", "val_acc"])
+plt.figure(figsize = (10, 4))
+plt.subplot(1, 2, 1)
+plt.title("Acc")
+plt.plot(eegnet_si_his["acc"], color="red")
+plt.plot(eegnet_si_his["val_acc"], color="blue")
+plt.subplot(1, 2, 2)
+plt.title("Loss")
+plt.plot(eegnet_si_his["loss"], color="red")
+plt.plot(eegnet_si_his["val_loss"], color="blue")
+plt.show()
+
+si_model = Model.load(eegnet_si_his["lastest_model_path"])
+eva_test = si_model.evaluate(dataloader=testloader)
+print(f"Test Accuracy: {eva_test[1]:.4f}\tTest Loss: {eva_test[0]:.4f}")
+rec_test = {"total": [0, 0, 0, 0], "hit": [0, 0, 0, 0]}
+real_test = teY.reshape(teY.size)
+pred_test = si_model.predict(dataset=testset)
+for i in range(288):
+    rec_test["total"][real_test[i]] += 1
+    rec_test["hit"][real_test[i]] += (1 if real_test[i] == pred_test[i] else 0)
+for i in range(4):
+    print("Test accuracy of class-{}: {}".format(i, rec_test["hit"][i] / rec_test["total"][i]))
+
+"""### Subject-Dependent"""
+
+trainloader = DataLoader(dataset=sd_trainset, batch_size=32, shuffle=True)
+testloader = DataLoader(dataset=testset, batch_size=32, shuffle=True)
+model = Model(EEGNet().to(device), lr=0.001)
+eegnet_sd_his = model.fit(trainloader=trainloader, validloader=testloader, 
+    epochs=500, monitor=["acc", "val_acc"])
+plt.figure(figsize = (10, 4))
+plt.subplot(1, 2, 1)
+plt.title("Acc")
+plt.plot(eegnet_sd_his["acc"], color="red")
+plt.plot(eegnet_sd_his["val_acc"], color="blue")
+plt.subplot(1, 2, 2)
+plt.title("Loss")
+plt.plot(eegnet_sd_his["loss"], color="red")
+plt.plot(eegnet_sd_his["val_loss"], color="blue")
+plt.show()
+
+sd_model = Model.load(eegnet_sd_his["lastest_model_path"])
+eva_test = sd_model.evaluate(dataloader=testloader)
+print(f"Test Accuracy: {eva_test[1]:.4f}\tTest Loss: {eva_test[0]:.4f}")
+rec_test = {"total": [0, 0, 0, 0], "hit": [0, 0, 0, 0]}
+real_test = teY.reshape(teY.size)
+pred_test = sd_model.predict(dataset=testset)
+for i in range(288):
+    rec_test["total"][real_test[i]] += 1
+    rec_test["hit"][real_test[i]] += (1 if real_test[i] == pred_test[i] else 0)
+for i in range(4):
+    print("Test accuracy of class-{}: {}".format(i, rec_test["hit"][i] / rec_test["total"][i]))
+
+"""### Subject-Independent + Fine-Tuning"""
+
+trainloader = DataLoader(dataset=ft_trainset, batch_size=32, shuffle=True)
+testloader = DataLoader(dataset=testset, batch_size=32, shuffle=True)
+si_model.save("./model/pre-trained_si_model.pt")
+si_model_dup = torch.load("./model/pre-trained_si_model.pt")
+for param in si_model_dup.parameters():
+    param.requires_grad = False
+si_model_dup.classifier = nn.Linear(si_model_dup.classifier.in_features, 4)
+ft_model = si_model_dup.to(device)
+model = Model(ft_model, lr=0.001)
+model.optimizer = optim.Adam(ft_model.classifier.parameters(), lr=0.001)
+eegnet_sift_his = model.fit(trainloader=trainloader, validloader=testloader, epochs=500, monitor=["acc", "val_acc"])
+plt.figure(figsize = (10, 4))
+plt.subplot(1, 2, 1)
+plt.title("Acc")
+plt.plot(eegnet_sift_his["acc"], color="red")
+plt.plot(eegnet_sift_his["val_acc"], color="blue")
+plt.subplot(1, 2, 2)
+plt.title("Loss")
+plt.plot(eegnet_sift_his["loss"], color="red")
+plt.plot(eegnet_sift_his["val_loss"], color="blue")
+plt.show()
+
+sift_model = Model.load(eegnet_sift_his["lastest_model_path"])
+eva_test = sift_model.evaluate(dataloader=testloader)
+print(f"Test Accuracy: {eva_test[1]:.4f}\tTest Loss: {eva_test[0]:.4f}")
+rec_test = {"total": [0, 0, 0, 0], "hit": [0, 0, 0, 0]}
+real_test = teY.reshape(teY.size)
+pred_test = sift_model.predict(dataset=testset)
+for i in range(288):
+    rec_test["total"][real_test[i]] += 1
+    rec_test["hit"][real_test[i]] += (1 if real_test[i] == pred_test[i] else 0)
+for i in range(4):
+    print("Test accuracy of class-{}: {}".format(i, rec_test["hit"][i] / rec_test["total"][i]))
