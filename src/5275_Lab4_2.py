@@ -297,13 +297,13 @@ class Model(object):
             for _ in monitor:
                 if not _ in ["loss", "acc", "val_loss", "val_acc"]:
                     raise Exception(f"\"{_}\" is not a valid monitor condition.")
-                elif _ == "loss" and pre_ck_point[0] < evaluation[0]:
+                elif _ == "loss" and pre_ck_point[0] <= evaluation[0]:
                     return False # present epoch loss > history loss
-                elif _ == "acc" and pre_ck_point[1] > evaluation[1]:
+                elif _ == "acc" and pre_ck_point[1] >= evaluation[1]:
                     return False # present epoch acc < history acc
-                elif _ == "val_loss" and pre_ck_point[2] < evaluation[2]:
+                elif _ == "val_loss" and pre_ck_point[2] <= evaluation[2]:
                     return False # present epoch val_loss > history val_loss
-                elif _ == "val_acc" and pre_ck_point[3] > evaluation[3]:
+                elif _ == "val_acc" and pre_ck_point[3] >= evaluation[3]:
                     return False # present epoch val_acc < history val_acc        
         return True
 
@@ -838,6 +838,135 @@ plt.plot(eegnet_sift_his["val_loss"], color="blue")
 plt.show()
 
 sift_model = Model.load(eegnet_sift_his["lastest_model_path"])
+eva_test = sift_model.evaluate(dataloader=testloader)
+print(f"Test Accuracy: {eva_test[1]:.4f}\tTest Loss: {eva_test[0]:.4f}")
+rec_test = {"total": [0, 0, 0, 0], "hit": [0, 0, 0, 0]}
+real_test = teY.reshape(teY.size)
+pred_test = sift_model.predict(dataset=testset)
+for i in range(288):
+    rec_test["total"][real_test[i]] += 1
+    rec_test["hit"][real_test[i]] += (1 if real_test[i] == pred_test[i] else 0)
+for i in range(4):
+    print("Test accuracy of class-{}: {}".format(i, rec_test["hit"][i] / rec_test["total"][i]))
+
+"""## Shallow ConvNet
+
+### Subject-Individual
+"""
+
+trainloader = DataLoader(dataset=ind_trainset, batch_size=32, shuffle=True)
+testloader = DataLoader(dataset=testset, batch_size=32, shuffle=True)
+model = Model(ShallowConvNet().to(device), lr=0.001)
+sha_convnet_ind_his = model.fit(trainloader=trainloader, validloader=testloader, 
+    epochs=500, monitor=["acc", "val_acc"])
+plt.figure(figsize = (10, 4))
+plt.subplot(1, 2, 1)
+plt.title("Acc")
+plt.plot(sha_convnet_ind_his["acc"], color="red")
+plt.plot(sha_convnet_ind_his["val_acc"], color="blue")
+plt.subplot(1, 2, 2)
+plt.title("Loss")
+plt.plot(sha_convnet_ind_his["loss"], color="red")
+plt.plot(sha_convnet_ind_his["val_loss"], color="blue")
+plt.show()
+
+ind_model = Model.load(sha_convnet_ind_his["lastest_model_path"])
+eva_test = ind_model.evaluate(dataloader=testloader)
+print(f"Test Accuracy: {eva_test[1]:.4f}\tTest Loss: {eva_test[0]:.4f}")
+rec_test = {"total": [0, 0, 0, 0], "hit": [0, 0, 0, 0]}
+real_test = teY.reshape(teY.size)
+pred_test = ind_model.predict(dataset=testset)
+for i in range(288):
+    rec_test["total"][real_test[i]] += 1
+    rec_test["hit"][real_test[i]] += (1 if real_test[i] == pred_test[i] else 0)
+for i in range(4):
+    print("Test accuracy of class-{}: {}".format(i, rec_test["hit"][i] / rec_test["total"][i]))
+
+"""### Subject-Independent"""
+
+trainloader = DataLoader(dataset=si_trainset, batch_size=32, shuffle=True)
+testloader = DataLoader(dataset=testset, batch_size=32, shuffle=True)
+model = Model(ShallowConvNet().to(device), lr=0.001)
+sha_convnet_si_his = model.fit(trainloader=trainloader, validloader=testloader, 
+    epochs=500, monitor=["acc", "val_acc"])
+plt.figure(figsize = (10, 4))
+plt.subplot(1, 2, 1)
+plt.title("Acc")
+plt.plot(sha_convnet_si_his["acc"], color="red")
+plt.plot(sha_convnet_si_his["val_acc"], color="blue")
+plt.subplot(1, 2, 2)
+plt.title("Loss")
+plt.plot(sha_convnet_si_his["loss"], color="red")
+plt.plot(sha_convnet_si_his["val_loss"], color="blue")
+plt.show()
+
+si_model = Model.load(sha_convnet_si_his["lastest_model_path"])
+eva_test = si_model.evaluate(dataloader=testloader)
+print(f"Test Accuracy: {eva_test[1]:.4f}\tTest Loss: {eva_test[0]:.4f}")
+rec_test = {"total": [0, 0, 0, 0], "hit": [0, 0, 0, 0]}
+real_test = teY.reshape(teY.size)
+pred_test = si_model.predict(dataset=testset)
+for i in range(288):
+    rec_test["total"][real_test[i]] += 1
+    rec_test["hit"][real_test[i]] += (1 if real_test[i] == pred_test[i] else 0)
+for i in range(4):
+    print("Test accuracy of class-{}: {}".format(i, rec_test["hit"][i] / rec_test["total"][i]))
+
+"""### Subject-Dependent"""
+
+trainloader = DataLoader(dataset=sd_trainset, batch_size=32, shuffle=True)
+testloader = DataLoader(dataset=testset, batch_size=32, shuffle=True)
+model = Model(ShallowConvNet().to(device), lr=0.001)
+sha_convnet_sd_his = model.fit(trainloader=trainloader, validloader=testloader, 
+    epochs=500, monitor=["acc", "val_acc"])
+plt.figure(figsize = (10, 4))
+plt.subplot(1, 2, 1)
+plt.title("Acc")
+plt.plot(sha_convnet_sd_his["acc"], color="red")
+plt.plot(sha_convnet_sd_his["val_acc"], color="blue")
+plt.subplot(1, 2, 2)
+plt.title("Loss")
+plt.plot(sha_convnet_sd_his["loss"], color="red")
+plt.plot(sha_convnet_sd_his["val_loss"], color="blue")
+plt.show()
+
+sd_model = Model.load(sha_convnet_sd_his["lastest_model_path"])
+eva_test = sd_model.evaluate(dataloader=testloader)
+print(f"Test Accuracy: {eva_test[1]:.4f}\tTest Loss: {eva_test[0]:.4f}")
+rec_test = {"total": [0, 0, 0, 0], "hit": [0, 0, 0, 0]}
+real_test = teY.reshape(teY.size)
+pred_test = sd_model.predict(dataset=testset)
+for i in range(288):
+    rec_test["total"][real_test[i]] += 1
+    rec_test["hit"][real_test[i]] += (1 if real_test[i] == pred_test[i] else 0)
+for i in range(4):
+    print("Test accuracy of class-{}: {}".format(i, rec_test["hit"][i] / rec_test["total"][i]))
+
+"""### Subject-Independent + Fine-Tuning"""
+
+trainloader = DataLoader(dataset=ft_trainset, batch_size=32, shuffle=True)
+testloader = DataLoader(dataset=testset, batch_size=32, shuffle=True)
+si_model.save("./model/pre-trained_si_model.pt")
+si_model_dup = torch.load("./model/pre-trained_si_model.pt")
+for param in si_model_dup.parameters():
+    param.requires_grad = False
+si_model_dup.classifier = nn.Linear(si_model_dup.classifier.in_features, 4)
+ft_model = si_model_dup.to(device)
+model = Model(ft_model, lr=0.001)
+model.optimizer = optim.Adam(ft_model.classifier.parameters(), lr=0.001)
+sha_convnet_sift_his = model.fit(trainloader=trainloader, validloader=testloader, epochs=500, monitor=["acc", "val_acc"])
+plt.figure(figsize = (10, 4))
+plt.subplot(1, 2, 1)
+plt.title("Acc")
+plt.plot(sha_convnet_sift_his["acc"], color="red")
+plt.plot(sha_convnet_sift_his["val_acc"], color="blue")
+plt.subplot(1, 2, 2)
+plt.title("Loss")
+plt.plot(sha_convnet_sift_his["loss"], color="red")
+plt.plot(sha_convnet_sift_his["val_loss"], color="blue")
+plt.show()
+
+sift_model = Model.load(sha_convnet_sift_his["lastest_model_path"])
 eva_test = sift_model.evaluate(dataloader=testloader)
 print(f"Test Accuracy: {eva_test[1]:.4f}\tTest Loss: {eva_test[0]:.4f}")
 rec_test = {"total": [0, 0, 0, 0], "hit": [0, 0, 0, 0]}
