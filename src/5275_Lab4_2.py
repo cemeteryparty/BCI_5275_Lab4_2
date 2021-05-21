@@ -1106,3 +1106,136 @@ for i in range(288):
     rec_test["hit"][real_test[i]] += (1 if real_test[i] == pred_test[i] else 0)
 for i in range(4):
     print("Test accuracy of class-{}: {}".format(i, rec_test["hit"][i] / rec_test["total"][i]))
+
+"""## TSception
+
+### Subject-Individual
+"""
+
+trainloader = DataLoader(dataset=ind_trainset, batch_size=32, shuffle=True)
+testloader = DataLoader(dataset=testset, batch_size=32, shuffle=True)
+model = Model(TSception(num_classes=4, input_size=(1,22,562), 
+    sampling_rate=128, num_T=9, num_S=6, hidden=128, dropout_rate=0.5).to(device), lr=0.001)
+tsception_ind_his = model.fit(trainloader=trainloader, validloader=testloader, 
+    epochs=500, monitor=["acc", "val_acc"])
+plt.figure(figsize = (10, 4))
+plt.subplot(1, 2, 1)
+plt.title("Acc")
+plt.plot(tsception_ind_his["acc"], color="red")
+plt.plot(tsception_ind_his["val_acc"], color="blue")
+plt.subplot(1, 2, 2)
+plt.title("Loss")
+plt.plot(tsception_ind_his["loss"], color="red")
+plt.plot(tsception_ind_his["val_loss"], color="blue")
+plt.show()
+
+ind_model = Model.load(tsception_ind_his["lastest_model_path"])
+eva_test = ind_model.evaluate(dataloader=testloader)
+print(f"Test Accuracy: {eva_test[1]:.4f}\tTest Loss: {eva_test[0]:.4f}")
+rec_test = {"total": [0, 0, 0, 0], "hit": [0, 0, 0, 0]}
+real_test = teY.reshape(teY.size)
+pred_test = ind_model.predict(dataset=testset)
+for i in range(288):
+    rec_test["total"][real_test[i]] += 1
+    rec_test["hit"][real_test[i]] += (1 if real_test[i] == pred_test[i] else 0)
+for i in range(4):
+    print("Test accuracy of class-{}: {}".format(i, rec_test["hit"][i] / rec_test["total"][i]))
+
+"""### Subject-Independent"""
+
+trainloader = DataLoader(dataset=si_trainset, batch_size=32, shuffle=True)
+testloader = DataLoader(dataset=testset, batch_size=32, shuffle=True)
+model = Model(TSception(num_classes=4, input_size=(1,22,562), 
+    sampling_rate=128, num_T=9, num_S=6, hidden=128, dropout_rate=0.5).to(device), lr=0.001)
+tsception_si_his = model.fit(trainloader=trainloader, validloader=testloader, 
+    epochs=500, monitor=["acc", "val_acc"])
+plt.figure(figsize = (10, 4))
+plt.subplot(1, 2, 1)
+plt.title("Acc")
+plt.plot(sccnet_si_his["acc"], color="red")
+plt.plot(sccnet_si_his["val_acc"], color="blue")
+plt.subplot(1, 2, 2)
+plt.title("Loss")
+plt.plot(sccnet_si_his["loss"], color="red")
+plt.plot(sccnet_si_his["val_loss"], color="blue")
+plt.show()
+
+si_model = Model.load(tsception_si_his["lastest_model_path"])
+eva_test = si_model.evaluate(dataloader=testloader)
+print(f"Test Accuracy: {eva_test[1]:.4f}\tTest Loss: {eva_test[0]:.4f}")
+rec_test = {"total": [0, 0, 0, 0], "hit": [0, 0, 0, 0]}
+real_test = teY.reshape(teY.size)
+pred_test = si_model.predict(dataset=testset)
+for i in range(288):
+    rec_test["total"][real_test[i]] += 1
+    rec_test["hit"][real_test[i]] += (1 if real_test[i] == pred_test[i] else 0)
+for i in range(4):
+    print("Test accuracy of class-{}: {}".format(i, rec_test["hit"][i] / rec_test["total"][i]))
+
+"""### Subject-Dependent"""
+
+trainloader = DataLoader(dataset=sd_trainset, batch_size=32, shuffle=True)
+testloader = DataLoader(dataset=testset, batch_size=32, shuffle=True)
+model = Model(TSception(num_classes=4, input_size=(1,22,562), 
+    sampling_rate=128, num_T=9, num_S=6, hidden=128, dropout_rate=0.5).to(device), lr=0.001)
+tsception_sd_his = model.fit(trainloader=trainloader, validloader=testloader, 
+    epochs=500, monitor=["acc", "val_acc"])
+plt.figure(figsize = (10, 4))
+plt.subplot(1, 2, 1)
+plt.title("Acc")
+plt.plot(tsception_sd_his["acc"], color="red")
+plt.plot(tsception_sd_his["val_acc"], color="blue")
+plt.subplot(1, 2, 2)
+plt.title("Loss")
+plt.plot(tsception_sd_his["loss"], color="red")
+plt.plot(tsception_sd_his["val_loss"], color="blue")
+plt.show()
+
+sd_model = Model.load(tsception_sd_his["lastest_model_path"])
+eva_test = sd_model.evaluate(dataloader=testloader)
+print(f"Test Accuracy: {eva_test[1]:.4f}\tTest Loss: {eva_test[0]:.4f}")
+rec_test = {"total": [0, 0, 0, 0], "hit": [0, 0, 0, 0]}
+real_test = teY.reshape(teY.size)
+pred_test = sd_model.predict(dataset=testset)
+for i in range(288):
+    rec_test["total"][real_test[i]] += 1
+    rec_test["hit"][real_test[i]] += (1 if real_test[i] == pred_test[i] else 0)
+for i in range(4):
+    print("Test accuracy of class-{}: {}".format(i, rec_test["hit"][i] / rec_test["total"][i]))
+
+"""### Subject-Independent + Fine-Tuning"""
+
+trainloader = DataLoader(dataset=ft_trainset, batch_size=32, shuffle=True)
+testloader = DataLoader(dataset=testset, batch_size=32, shuffle=True)
+si_model.save("./model/pre-trained_si_model.pt")
+si_model_dup = torch.load("./model/pre-trained_si_model.pt")
+for param in si_model_dup.parameters():
+    param.requires_grad = False
+si_model_dup.fc[3] = nn.Linear(si_model_dup.fc[3].in_features, 4)
+ft_model = si_model_dup.to(device)
+#summary(ft_model, (1, 22, 562))
+model = Model(ft_model, lr=0.001)
+model.optimizer = optim.Adam(si_model_dup.fc[3].parameters(), lr=0.001)
+tsception_sift_his = model.fit(trainloader=trainloader, validloader=testloader, epochs=500, monitor=["acc", "val_acc"])
+plt.figure(figsize = (10, 4))
+plt.subplot(1, 2, 1)
+plt.title("Acc")
+plt.plot(tsception_sift_his["acc"], color="red")
+plt.plot(tsception_sift_his["val_acc"], color="blue")
+plt.subplot(1, 2, 2)
+plt.title("Loss")
+plt.plot(tsception_sift_his["loss"], color="red")
+plt.plot(tsception_sift_his["val_loss"], color="blue")
+plt.show()
+
+sift_model = Model.load(tsception_sift_his["lastest_model_path"])
+eva_test = sift_model.evaluate(dataloader=testloader)
+print(f"Test Accuracy: {eva_test[1]:.4f}\tTest Loss: {eva_test[0]:.4f}")
+rec_test = {"total": [0, 0, 0, 0], "hit": [0, 0, 0, 0]}
+real_test = teY.reshape(teY.size)
+pred_test = sift_model.predict(dataset=testset)
+for i in range(288):
+    rec_test["total"][real_test[i]] += 1
+    rec_test["hit"][real_test[i]] += (1 if real_test[i] == pred_test[i] else 0)
+for i in range(4):
+    print("Test accuracy of class-{}: {}".format(i, rec_test["hit"][i] / rec_test["total"][i]))
